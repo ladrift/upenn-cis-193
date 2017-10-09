@@ -15,13 +15,13 @@ import (
 )
 
 func main() {
-	for _, slice := range ScrapeHackerNews(5) {
-		fmt.Println(slice)
-	}
+	// for _, slice := range ScrapeHackerNews(5) {
+	// 	fmt.Println(slice)
+	// }
 
-	for _, email := range GetEmails() {
-		fmt.Println(email)
-	}
+	// for _, email := range GetEmails() {
+	// 	fmt.Println(email)
+	// }
 
 	gdp, err := GetCountryGDP("Japan")
 	if err != nil {
@@ -152,28 +152,9 @@ type CountryData struct {
 // the GDP for "Colombia" is 274135.
 func GetCountryGDP(country string) (int, error) {
 	root := "https://www.cis.upenn.edu/~cis193/scraping/9828772efc2bd314a277c8880695dea2.html"
-	NumScraper := runtime.NumCPU()
 
-	data := make(chan CountryData)
-	wg := new(sync.WaitGroup)
-	wg.Add(NumScraper)
-	go func() {
-		wg.Wait()
-		close(data)
-	}()
-
-	errc := make(chan error)
-	ctx, cancelFunc := context.WithCancel(context.Background())
+	data, errc, cancelFunc := scrapeCountryData(root)
 	defer cancelFunc()
-
-	urls := make(chan string, 1)
-	urls <- root
-	for i := 0; i < NumScraper; i++ {
-		go func() {
-			countryDataScraper(ctx, urls, data, errc)
-			wg.Done()
-		}()
-	}
 
 	for {
 		select {
@@ -194,6 +175,32 @@ func GetCountryGDP(country string) (int, error) {
 			return 0, err
 		}
 	}
+}
+
+func scrapeCountryData(root string) (<-chan CountryData, <-chan error, context.CancelFunc) {
+	NumScraper := runtime.NumCPU()
+
+	data := make(chan CountryData)
+	wg := new(sync.WaitGroup)
+	wg.Add(NumScraper)
+	go func() {
+		wg.Wait()
+		close(data)
+	}()
+
+	errc := make(chan error)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	urls := make(chan string, 1)
+	urls <- root
+	for i := 0; i < NumScraper; i++ {
+		go func() {
+			countryDataScraper(ctx, urls, data, errc)
+			wg.Done()
+		}()
+	}
+
+	return data, errc, cancelFunc
 }
 
 func countryDataScraper(ctx context.Context, urls chan string, data chan<- CountryData, errc chan<- error) {
